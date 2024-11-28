@@ -1,4 +1,5 @@
 FiveM ESX & OX community service script using ox_target
+Preview: https://youtu.be/4ZW8LyM1bSo
 Features:
   - When you send player to community service it will take all his items and store them in database including all money
   - If player leaves while on community service it will automatically teleport him to finish them
