@@ -1,4 +1,5 @@
 local activePlayers = {}
+local actionCooldown = {}
 
 local function AddServiceRecord(identifier, adminIdentifier, actionsGiven, reason)
     local historyId = MySQL.insert.await('INSERT INTO community_service_history (identifier, admin_identifier, actions_given, reason) VALUES (?, ?, ?, ?)',
@@ -30,41 +31,8 @@ local function checkAndRestoreCommunityService(source, identifier)
                 remaining = activeService.actions_remaining,
                 reason = activeService.reason
             }
-            print('getala funkciju')
             
             SetTimeout(5000, function()
-                local itemResult = MySQL.single.await('SELECT * FROM community_service_items WHERE identifier = ?', {identifier})
-                if itemResult then
-                    local items = json.decode(itemResult.items)
-                    local weapons = json.decode(itemResult.weapons)
-                    
-                    for _, item in pairs(xPlayer.inventory) do 
-                        if item.count > 0 then
-                            xPlayer.removeInventoryItem(item.name, item.count)
-                        end
-                    end
-                    
-                    local loadout = xPlayer.getLoadout()
-                    for _, weapon in ipairs(loadout) do
-                        xPlayer.removeWeapon(weapon.name)
-                    end
-                    
-                    xPlayer.removeMoney(xPlayer.getMoney())
-                    xPlayer.removeAccountMoney('black_money', xPlayer.getAccount('black_money').money)
-                    xPlayer.setAccountMoney('bank', 0)
-                    
-                    for _, item in ipairs(items) do
-                        xPlayer.addInventoryItem(item.name, item.count)
-                    end
-                    
-                    for _, weapon in ipairs(weapons) do
-                        xPlayer.addWeapon(weapon.name, weapon.ammo)
-                        for _, component in ipairs(weapon.components or {}) do
-                            xPlayer.addWeaponComponent(weapon.name, component)
-                        end
-                    end
-                end
-                
                 TriggerClientEvent('tj_communityservice:inService', source, activeService.actions_remaining)
             end)
         end
@@ -167,9 +135,15 @@ local function restorePlayerItems(playerId)
 end
 
 RegisterNetEvent('tj_communityservice:completeAction')
-AddEventHandler('tj_communityservice:completeAction', function()
+AddEventHandler('tj_communityservice:completeAction', function(receivedToken)
     local source = source
     if not activePlayers[source] then return end
+
+    if actionCooldown[source] and os.time() - actionCooldown[source] < 7 then
+        print(("[WARNING] Player %s tried to spam the action"):format(GetPlayerName(source)))
+        return
+    end
+    actionCooldown[source] = os.time()
 
     activePlayers[source].remaining = activePlayers[source].remaining - 1
     
