@@ -1,0 +1,347 @@
+local activePlayers = {}
+
+local function AddServiceRecord(identifier, adminIdentifier, actionsGiven, reason)
+    local historyId = MySQL.insert.await('INSERT INTO community_service_history (identifier, admin_identifier, actions_given, reason) VALUES (?, ?, ?, ?)',
+        {identifier, adminIdentifier, actionsGiven, reason})
+    
+    MySQL.insert.await('INSERT INTO community_service_active (identifier, actions_remaining, total_actions, history_id, reason) VALUES (?, ?, ?, ?, ?)',
+        {identifier, actionsGiven, actionsGiven, historyId, reason})
+        
+    return historyId
+end
+
+local function isAuthorized(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return false end
+
+    local playerGroup = xPlayer.getGroup()
+    return Config.AuthorizedGroups[playerGroup] or false
+end
+
+
+local function checkAndRestoreCommunityService(source, identifier)
+    local activeService = MySQL.single.await('SELECT * FROM community_service_active WHERE identifier = ?', {identifier})
+    
+    if activeService then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if xPlayer then
+            activePlayers[source] = {
+                actions = activeService.total_actions,
+                remaining = activeService.actions_remaining,
+                reason = activeService.reason
+            }
+            print('getala funkciju')
+            
+            SetTimeout(5000, function()
+                local itemResult = MySQL.single.await('SELECT * FROM community_service_items WHERE identifier = ?', {identifier})
+                if itemResult then
+                    local items = json.decode(itemResult.items)
+                    local weapons = json.decode(itemResult.weapons)
+                    
+                    for _, item in pairs(xPlayer.inventory) do 
+                        if item.count > 0 then
+                            xPlayer.removeInventoryItem(item.name, item.count)
+                        end
+                    end
+                    
+                    local loadout = xPlayer.getLoadout()
+                    for _, weapon in ipairs(loadout) do
+                        xPlayer.removeWeapon(weapon.name)
+                    end
+                    
+                    xPlayer.removeMoney(xPlayer.getMoney())
+                    xPlayer.removeAccountMoney('black_money', xPlayer.getAccount('black_money').money)
+                    xPlayer.setAccountMoney('bank', 0)
+                    
+                    for _, item in ipairs(items) do
+                        xPlayer.addInventoryItem(item.name, item.count)
+                    end
+                    
+                    for _, weapon in ipairs(weapons) do
+                        xPlayer.addWeapon(weapon.name, weapon.ammo)
+                        for _, component in ipairs(weapon.components or {}) do
+                            xPlayer.addWeaponComponent(weapon.name, component)
+                        end
+                    end
+                end
+                
+                TriggerClientEvent('tj_communityservice:inService', source, activeService.actions_remaining)
+            end)
+        end
+    end
+end
+
+AddEventHandler('esx:playerLoaded', function(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if xPlayer then
+        local identifier = xPlayer.identifier
+
+        if identifier then
+            Wait(5000)
+            SetTimeout(10000, function()
+                checkAndRestoreCommunityService(source, identifier)
+            end)
+        else 
+        end
+    end
+end)
+
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    
+    local players = ESX.GetPlayers()
+    for _, source in ipairs(players) do
+        local identifier = ESX.GetPlayerFromId(source)?.identifier
+        if identifier then
+            checkAndRestoreCommunityService(source, identifier)
+        end
+    end
+end)
+
+
+
+local function storePlayerItems(playerId)
+    local xPlayer = ESX.GetPlayerFromId(playerId)
+    if not xPlayer then return end
+
+    local items = {}
+    local inventory = xPlayer.inventory
+
+    for _, item in pairs(inventory) do 
+        if item.count > 0 then
+            table.insert(items, {name = item.name, count = item.count})
+            xPlayer.removeInventoryItem(item.name, item.count)
+        end
+    end
+
+    local weapons = {}
+    local loadout = xPlayer.getLoadout()
+    
+    for _, weapon in ipairs(loadout) do
+        table.insert(weapons, {
+            name = weapon.name,
+            ammo = weapon.ammo,
+            components = weapon.components or {}
+        })
+        xPlayer.removeWeapon(weapon.name)
+    end
+
+    local money = xPlayer.getMoney()
+    local blackMoney = xPlayer.getAccount('black_money').money
+    local bank = xPlayer.getAccount('bank').money
+
+    xPlayer.removeMoney(money)
+    xPlayer.removeAccountMoney('black_money', blackMoney)
+    xPlayer.setAccountMoney('bank', 0)
+
+    MySQL.insert('INSERT INTO community_service_items (identifier, items, weapons, money, black_money, bank) VALUES (?, ?, ?, ?, ?, ?)',
+        {xPlayer.identifier, json.encode(items), json.encode(weapons), money, blackMoney, bank})
+end
+
+local function restorePlayerItems(playerId)
+    local xPlayer = ESX.GetPlayerFromId(playerId)
+    if not xPlayer then return end
+
+    local result = MySQL.single.await('SELECT * FROM community_service_items WHERE identifier = ?', {xPlayer.identifier})
+    if result then
+        local items = json.decode(result.items)
+        for _, item in ipairs(items) do
+            xPlayer.addInventoryItem(item.name, item.count)
+        end
+
+        local weapons = json.decode(result.weapons)
+        for _, weapon in ipairs(weapons) do
+            xPlayer.addWeapon(weapon.name, weapon.ammo)
+            for _, component in ipairs(weapon.components) do
+                xPlayer.addWeaponComponent(weapon.name, component)
+            end
+        end
+
+        xPlayer.addMoney(result.money)
+        xPlayer.addAccountMoney('black_money', result.black_money)
+        xPlayer.setAccountMoney('bank', result.bank)
+
+        MySQL.query('DELETE FROM community_service_items WHERE identifier = ?', {xPlayer.identifier})
+    end
+end
+
+RegisterNetEvent('tj_communityservice:completeAction')
+AddEventHandler('tj_communityservice:completeAction', function()
+    local source = source
+    if not activePlayers[source] then return end
+
+    activePlayers[source].remaining = activePlayers[source].remaining - 1
+    
+    if activePlayers[source].remaining <= 0 then
+        restorePlayerItems(source)
+        activePlayers[source] = nil
+        TriggerClientEvent('tj_communityservice:finishService', source)
+        MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {ESX.GetPlayerFromId(source).identifier})
+    else
+        MySQL.query('UPDATE community_service_active SET actions_remaining = ? WHERE identifier = ?',
+            {activePlayers[source].remaining, ESX.GetPlayerFromId(source).identifier})
+        TriggerClientEvent('tj_communityservice:updateActions', source, activePlayers[source].remaining)
+    end
+end)
+
+RegisterNetEvent('tj_communityservice:sendToService')
+AddEventHandler('tj_communityservice:sendToService', function(targetId, actions, reason)
+    local src = source
+    if not isAuthorized(src) then
+        lib.notify(src, {
+            title = 'Error',
+            description = locale('no_perm'),
+            type = 'error'
+        })
+        return
+    end
+
+    if not reason or reason == '' then
+        TriggerClientEvent('esx:showNotification', src, locale('need_resaon'))
+        return
+    end
+
+    local xTarget = ESX.GetPlayerFromId(targetId)
+    if not xTarget then return end
+
+    local xPlayer = ESX.GetPlayerFromId(src)
+    
+    activePlayers[targetId] = {
+        actions = actions,
+        remaining = actions,
+        reason = reason
+    }
+
+    AddServiceRecord(xTarget.identifier, xPlayer.identifier, actions, reason)
+    storePlayerItems(targetId)
+    TriggerClientEvent('tj_communityservice:inService', targetId, actions)
+end)
+
+lib.callback.register('tj_communityservice:getActivePlayers', function(source)
+    if not isAuthorized(source) then return {} end
+
+    local players = {}
+    for playerId, data in pairs(activePlayers) do
+        local xPlayer = ESX.GetPlayerFromId(playerId)
+        if xPlayer then
+            table.insert(players, {
+                id = playerId,
+                name = xPlayer.getName(),
+                remaining = data.remaining,
+                total = data.actions,
+                reason = data.reason
+            })
+        end
+    end
+    return players
+end)
+
+RegisterNetEvent('tj_communityservice:removeFromService')
+AddEventHandler('tj_communityservice:removeFromService', function(targetId)
+    local source = source
+    if not isAuthorized(source) then return end
+
+    local xTarget = ESX.GetPlayerFromId(targetId)
+    if not xTarget then return end
+
+    if activePlayers[targetId] then
+        restorePlayerItems(targetId)
+        activePlayers[targetId] = nil
+        TriggerClientEvent('tj_communityservice:finishService', targetId)
+        MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {xTarget.identifier})
+    end
+end)
+
+CreateThread(function()
+    while true do
+        Wait(Config.HealInterval * 60 * 1000)
+        for playerId, _ in pairs(activePlayers) do
+            TriggerClientEvent('tj_communityservice:heal', playerId)
+        end
+    end
+end)
+
+RegisterNetEvent('tj_communityservice:addMarkers')
+AddEventHandler('tj_communityservice:addMarkers', function(targetId, markerCount)
+    local source = source
+    if not isAuthorized(source) then
+        return
+    end
+
+    local xTarget = ESX.GetPlayerFromId(targetId)
+    if not xTarget then return end
+
+    if not activePlayers[targetId] then
+        lib.notify(source, {
+            title = 'Error',
+            description = locale('no_com_service'),
+            type = 'error'
+        })
+        return
+    end
+
+    activePlayers[targetId].remaining = activePlayers[targetId].remaining + markerCount
+    activePlayers[targetId].actions = activePlayers[targetId].actions + markerCount
+
+    MySQL.query('UPDATE community_service_active SET actions_remaining = actions_remaining + ?, total_actions = total_actions + ? WHERE identifier = ?',
+        {markerCount, markerCount, xTarget.identifier})
+
+    TriggerClientEvent('tj_communityservice:updateActions', targetId, activePlayers[targetId].remaining)
+
+    lib.notify(source, {
+        title = 'Success',
+        description = string.format(locale('added_markers_to'), markerCount, xTarget.getName()),
+        type = 'success'
+    })
+end)
+
+RegisterNetEvent('tj_communityservice:removeMarkers')
+AddEventHandler('tj_communityservice:removeMarkers', function(targetId, markerCount)
+    local source = source
+    if not isAuthorized(source) then
+        lib.notify(source, {
+            title = 'Error',
+            description = locale('no_perm'),
+            type = 'error'
+        })
+        return
+    end
+
+    local xTarget = ESX.GetPlayerFromId(targetId)
+    if not xTarget then return end
+
+    if not activePlayers[targetId] then
+        return
+    end
+
+    local newRemainingActions = math.max(0, activePlayers[targetId].remaining - markerCount)
+    local removedMarkers = activePlayers[targetId].remaining - newRemainingActions
+
+    activePlayers[targetId].remaining = newRemainingActions
+
+    MySQL.query('UPDATE community_service_active SET actions_remaining = ? WHERE identifier = ?',
+        {newRemainingActions, xTarget.identifier})
+
+    if newRemainingActions <= 0 then
+        restorePlayerItems(targetId)
+        activePlayers[targetId] = nil
+        lib.notify(source, {
+            title = 'Success',
+            description = string.format(locale('removed_markers_from'), removedMarkers, xTarget.getName()),
+            type = 'success'
+        })
+        TriggerClientEvent('tj_communityservice:finishService', targetId)
+        MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {xTarget.identifier})
+    else
+        TriggerClientEvent('tj_communityservice:updateActions', targetId, newRemainingActions)
+    end
+end)
+
+
+ESX.RegisterServerCallback("community_service:checkAdmin", function(source, cb)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    local playerRank = xPlayer.getGroup()
+
+    cb(playerRank)
+end)
