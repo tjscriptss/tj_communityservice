@@ -1,8 +1,8 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Your Name'
-description 'ESX Community Service Script'
+author 'TJ Scripts'
+description 'ESX OX Community Service Script'
 version '1.0.0'
 lua54 'yes'
 
