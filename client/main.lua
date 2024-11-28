@@ -144,7 +144,7 @@ AddEventHandler('tj_communityservice:heal', function()
 end)
 
 RegisterCommand(Config.Commands.communityservice, function()
-ESX.TriggerServerCallback("tj_mafije:proveriRank", function(playerRank)
+ESX.TriggerServerCallback("community_service:checkAdmin", function(playerRank)
         if Config.AuthorizedGroups[playerRank] then
         lib.showContext('community_service_menu')
     else
