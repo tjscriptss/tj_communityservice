@@ -102,7 +102,6 @@ AddEventHandler('tj_communityservice:inService', function(actions)
             Wait(0)
             DisableCombat()
             
-            -- Check distance from service location
             local playerCoords = GetEntityCoords(PlayerPedId())
             local distance = #(playerCoords - Config.ServiceLocation)
             
