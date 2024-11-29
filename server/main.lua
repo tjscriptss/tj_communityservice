@@ -1,6 +1,41 @@
 local activePlayers = {}
 local actionCooldown = {}
 
+local Webhooks = {
+    ['communityservice'] = 'https://discord.com/api/webhooks/1312014498932195348/Btk3MhuUADu-FwAp8_YllWPm65QRsX6tBgmPlQZXgm2N1XNieISDUk171HELUg782ePl',
+}
+
+
+local function SendToDiscord(webhookName, title, message, color, tagEveryone)
+    local webhook = Webhooks[webhookName]
+    local datum = os.date("%d-%m-%Y")
+    local vreme = os.date('*t')
+    if not webhook then
+        print('^1[DiscordLogs] Webhook ' .. webhookName .. ' nije pronađen!^7')
+        return
+    end
+
+    local embed = {
+        {
+            ["color"] = color or 14423100,
+            ["title"] = title or "Poruka",
+            ["description"] = message or "Nema opisa.",
+            ["footer"] = {
+                ["text"] = "Vreme: " .. vreme.hour .. ":" .. vreme.min .. ":" .. vreme.sec .. "\nDatum: " .. datum,
+            },
+        }
+    }
+
+    PerformHttpRequest(webhook, function(err, text, headers)
+        if err ~= 200 and err ~= 204 then
+            print('^1[DiscordLogs] Greska prilikom slanja poruke: ' .. err .. '^7')
+        end
+    end, 'POST', json.encode({
+        content = tagEveryone and "@everyone" or nil,
+        embeds = embed,
+    }), { ['Content-Type'] = 'application/json' })
+end
+
 local function AddServiceRecord(identifier, adminIdentifier, actionsGiven, reason)
     local historyId = MySQL.insert.await('INSERT INTO community_service_history (identifier, admin_identifier, actions_given, reason) VALUES (?, ?, ?, ?)',
         {identifier, adminIdentifier, actionsGiven, reason})
@@ -152,6 +187,7 @@ AddEventHandler('tj_communityservice:completeAction', function(receivedToken)
         activePlayers[source] = nil
         TriggerClientEvent('tj_communityservice:finishService', source)
         MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {ESX.GetPlayerFromId(source).identifier})
+        SendToDiscord('communityservice', 'Community Service End', '**Igrac**: ```' .. GetPlayerName(source) .. '```', 16711680, false)
     else
         MySQL.query('UPDATE community_service_active SET actions_remaining = ? WHERE identifier = ?',
             {activePlayers[source].remaining, ESX.GetPlayerFromId(source).identifier})
@@ -187,6 +223,7 @@ AddEventHandler('tj_communityservice:sendToService', function(targetId, actions,
         reason = reason
     }
 
+    SendToDiscord('communityservice', 'Community Service Send', '**Admin**: ```' .. GetPlayerName(source) .. '```\n**Player**: ```'.. GetPlayerName(targetId) .. '```\n**Actions**: ```'.. actions ..  '```\n**Reason**: ```'.. reason .. '```', 16711680, false)    
     AddServiceRecord(xTarget.identifier, xPlayer.identifier, actions, reason)
     storePlayerItems(targetId)
     TriggerClientEvent('tj_communityservice:inService', targetId, actions)
@@ -223,6 +260,7 @@ AddEventHandler('tj_communityservice:removeFromService', function(targetId)
         restorePlayerItems(targetId)
         activePlayers[targetId] = nil
         TriggerClientEvent('tj_communityservice:finishService', targetId)
+        SendToDiscord('communityservice', 'Community Service End', '**Admin**: ```' .. GetPlayerName(source) .. '```\n**Player**: ```'.. GetPlayerName(targetId) .. '```', 16711680, false)
         MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {xTarget.identifier})
     end
 end)
@@ -262,6 +300,7 @@ AddEventHandler('tj_communityservice:addMarkers', function(targetId, markerCount
         {markerCount, markerCount, xTarget.identifier})
 
     TriggerClientEvent('tj_communityservice:updateActions', targetId, activePlayers[targetId].remaining)
+    SendToDiscord('communityservice', 'Community Service Add', '**Admin**: ```' .. GetPlayerName(source) .. '```\n**Player**: ```'.. GetPlayerName(targetId) .. '```\n**Actions**: ```'.. markerCount .. '```', 16711680, false)    
 
     lib.notify(source, {
         title = 'Success',
@@ -309,6 +348,7 @@ AddEventHandler('tj_communityservice:removeMarkers', function(targetId, markerCo
         MySQL.query('DELETE FROM community_service_active WHERE identifier = ?', {xTarget.identifier})
     else
         TriggerClientEvent('tj_communityservice:updateActions', targetId, newRemainingActions)
+        SendToDiscord('communityservice', 'Community Service Remove', '**Admin**: ```' .. GetPlayerName(source) .. '```\n**Player**: ```'.. GetPlayerName(targetId) .. '```\n**Actions**: ```'.. removedMarkers .. '```', 16711680, false)
     end
 end)
 
