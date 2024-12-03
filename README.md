@@ -11,3 +11,4 @@ Features:
   - Instead of markers you have props that you clean. Script will not load more that 5 props at once for optimisation
 
 Created by TJ Scripts
+Discord: https://discord.gg/FQCMcfAuje
