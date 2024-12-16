@@ -10,6 +10,11 @@ Config.Commands = {
     communityservice = 'communityservice',
 }
 
+Config.JobRolesAccess = {
+    ["police"] = true,
+}
+
+
 -- Community service location
 Config.ServiceLocation = vector3(3054.2637, -4694.6846, 14.2614)
 
@@ -18,6 +23,9 @@ Config.EndServiceLocation = vector3(427.2343, -979.8491, 30.7100)
 
 -- Maximum distance player can move from service location
 Config.MaxDistance = 30.0
+
+
+Config.MaxTargetDistance = 10.0
 
 -- How many props will there be at once
 Config.MaxProps = 5
