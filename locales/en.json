@@ -32,6 +32,11 @@
     "need_resaon": "You must provide a reason",
     "no_com_service": "Player is not in community service",
     "added_markers_to": "Added %d markers to %s",
-    "removed_markers_from": "Removed %d markers from %s"
+    "removed_markers_from": "Removed %d markers from %s",
+    "no_nearby_players": "No nearby players",
+    "send_to_service": "Send to community service",
+    "select_player": "Select Player",
+    "select_nearby_player": "Select closest player",
+    "player": "Player"
   }
   
