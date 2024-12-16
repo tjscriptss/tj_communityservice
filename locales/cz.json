@@ -32,5 +32,10 @@
     "need_resaon": "Musíš uvést důvod",
     "no_com_service": "Hráč si neodpykává trest!",
     "added_markers_to": "Přidané %d hodiny osobě: %s",
-    "removed_markers_from": "Odstraněné %d hodiny od: %s"
+    "removed_markers_from": "Odstraněné %d hodiny od: %s",
+    "no_nearby_players": "Žádní hráči poblíž",
+    "send_to_service": "Poslat do veřejně prospěšných služeb",
+    "select_player": "Vybrat hráče",
+    "select_nearby_player": "Vybrat nejbližšího hráče",
+    "player": "Hráč",
   }
