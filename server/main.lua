@@ -50,8 +50,9 @@ local function isAuthorized(source)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return false end
 
-    local playerGroup = xPlayer.getGroup()
-    return Config.AuthorizedGroups[playerGroup] or false
+    local playerGroup = xPlayer.getGroup()    
+    local playerJob = xPlayer.job.name
+    return Config.AuthorizedGroups[playerGroup] or Config.JobRolesAccess[playerJob] == true or false
 end
 
 
@@ -358,4 +359,14 @@ ESX.RegisterServerCallback("community_service:checkAdmin", function(source, cb)
     local playerRank = xPlayer.getGroup()
 
     cb(playerRank)
+end)
+
+ESX.RegisterServerCallback('community_service:checkJobAccess', function(source, cb)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    
+    if Config.JobRolesAccess[xPlayer.job.name] then
+        cb(true)
+    else
+        cb(false)
+    end
 end)
