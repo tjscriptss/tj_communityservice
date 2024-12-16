@@ -9,6 +9,7 @@ Features:
   - List of all active players on community server
   - Option to add/remove actions to active players
   - Instead of markers you have props that you clean. Script will not load more that 5 props at once for optimisation
+  - Option for enabled jobs to access to community service menu through ox_target
 
 Created by TJ Scripts
 Discord: https://discord.gg/FQCMcfAuje
