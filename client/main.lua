@@ -44,7 +44,7 @@ local function SpawnProps()
                         label = locale('cleaning_trash'),
                         position = 'bottom',
                         useWhileDead = false,
-                        canCancel = true,
+                        canCancel = false,
                         disable = {
                             car = true,
                             move = true,
@@ -255,103 +255,5 @@ lib.registerContext({
                 lib.showContext('active_players_menu')
             end
         }
-    }
-})
-
--- jobs
-
-local function GetNearbyPlayers()
-    local nearbyPlayers = {}
-    local playerPed = PlayerPedId()
-    local playerCoords = GetEntityCoords(playerPed)
-
-    for _, playerId in ipairs(GetActivePlayers()) do
-        local targetPed = GetPlayerPed(playerId)
-        if targetPed ~= playerPed then
-            local targetCoords = GetEntityCoords(targetPed)
-            local distance = #(playerCoords - targetCoords)
-            
-            if distance <= Config.MaxTargetDistance then
-                local serverPlayerId = GetPlayerServerId(playerId)
-                local playerName = GetPlayerName(playerId)
-                table.insert(nearbyPlayers, {
-                    id = serverPlayerId,
-                    name = playerName,
-                    distance = distance
-                })
-            end
-        end
-    end
-    
-    return nearbyPlayers
-end
-
-local function OpenPlayerSelectionDialog()
-    local nearbyPlayers = GetNearbyPlayers()
-    local playerOptions = {}
-    for _, player in ipairs(nearbyPlayers) do
-        table.insert(playerOptions, {
-            label = string.format("%s (ID: %s)", player.name, player.id),
-            value = player.id
-        })
-    end
-
-    local input = lib.inputDialog(locale('send_player'), {
-        {
-            type = 'select',
-            label = locale('player'),
-            description = locale('select_player'),
-            options = playerOptions,
-            required = true
-        },
-        {
-            type = 'number',
-            label = locale('actions'),
-            description = locale('actions_desc'),
-            required = true,
-            min = 1
-        },
-        {
-            type = 'input',
-            label = locale('reason'),
-            description = locale('reason_desc'),
-            required = true
-        }
-    })
-    
-    if input then
-        local selectedPlayerId = input[1]
-        local actions = input[2]
-        local reason = input[3]
-        TriggerServerEvent('tj_communityservice:sendToService', selectedPlayerId, actions, reason)
-    end
-end
-
-local function OpenCommunityServiceMenu()
-    ESX.TriggerServerCallback("community_service:checkJobAccess", function(hasAccess)
-        if hasAccess then
-            OpenPlayerSelectionDialog()
-        else
-            return ESX.ShowNotification(locale('no_perm'))
-        end 
-    end)
-end
-
-exports.ox_target:addGlobalPlayer({
-    {
-        name = 'community_service_action',
-        label = locale('send_to_service'),
-        icon = 'fas fa-broom',
-        canInteract = function(entity)
-            return Config.JobRolesAccess[ESX.PlayerData.job.name] and not IsPedInAnyVehicle(PlayerPedId(), false)
-        end,
-        onSelect = function(data)
-            local nearbyPlayers = GetNearbyPlayers()
-            if #nearbyPlayers == 0 then
-                ESX.ShowNotification(locale('no_nearby_players'))
-                return
-            end
-            OpenPlayerSelectionDialog()
-        end
     }
 })
